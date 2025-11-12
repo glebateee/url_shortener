@@ -5,8 +5,12 @@ import (
 	"os"
 	"strings"
 	"urlshortener/internal/config"
+	mwLogger "urlshortener/internal/http-server/middleware/logger"
 	"urlshortener/internal/lib/logger/sl"
 	"urlshortener/internal/storage/sqlite"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 const (
@@ -16,9 +20,13 @@ const (
 )
 
 /*
-sqlite : github.com/mattn/go-sqlite3
-config : github.com/ilyakaznacheev/cleanenv
+sqlite 		: github.com/mattn/go-sqlite3
+config 		: github.com/ilyakaznacheev/cleanenv
+chi-router  : github.com/go-chi/chi/v5
+json parser : github.com/go-chi/render
+validator 	: github.com/go-playground/validator/v10
 */
+
 func main() {
 	// Init config :
 	cfg := config.MustLoad()
@@ -35,8 +43,17 @@ func main() {
 		log.Error("failed to init storage", sl.Err(err))
 		os.Exit(1)
 	}
+
 	// init router : chi
 
+	router := chi.NewRouter()
+
+	// middleware
+
+	router.Use(middleware.RequestID)
+	router.Use(mwLogger.New(log))
+	router.Use(middleware.Recoverer)
+	router.Use(middleware.URLFormat)
 	// run server
 }
 
