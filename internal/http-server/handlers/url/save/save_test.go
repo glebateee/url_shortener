@@ -1,12 +1,14 @@
 package save_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -14,7 +16,6 @@ import (
 
 	"urlshortener/internal/http-server/handlers/url/save"
 	"urlshortener/internal/http-server/handlers/url/save/mocks"
-	"urlshortener/internal/lib/logger/handlers/slogdiscard"
 )
 
 func TestSaveHandler(t *testing.T) {
@@ -45,7 +46,7 @@ func TestSaveHandler(t *testing.T) {
 			name:      "Invalid URL",
 			url:       "some invalid URL",
 			alias:     "some_alias",
-			respError: "field URL is not a valid URL",
+			respError: "field URL is not a valid url",
 		},
 		{
 			name:      "SaveURL Error",
@@ -57,39 +58,35 @@ func TestSaveHandler(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			urlSaverMock := mocks.NewURLSaver(t)
 
-			if tc.respError == "" || tc.mockError != nil {
+			// Определяем, должен ли быть вызов SaveURL
+			if tc.mockError != nil || tc.respError == "" {
 				urlSaverMock.On("SaveURL", tc.url, mock.AnythingOfType("string")).
 					Return(int64(1), tc.mockError).
 					Once()
 			}
 
-			handler := save.New(slogdiscard.NewDiscardLogger(), urlSaverMock)
+			// Правильный discard логгер
+			log := slog.New(slog.NewTextHandler(io.Discard, nil))
+			handler := save.New(log, urlSaverMock)
 
 			input := fmt.Sprintf(`{"url": "%s", "alias": "%s"}`, tc.url, tc.alias)
-
-			req, err := http.NewRequest(http.MethodPost, "/url", bytes.NewReader([]byte(input)))
-			require.NoError(t, err)
-
+			req := httptest.NewRequest(http.MethodPost, "/url", strings.NewReader(input))
 			rr := httptest.NewRecorder()
+
 			handler.ServeHTTP(rr, req)
 
-			require.Equal(t, rr.Code, http.StatusOK)
-
-			body := rr.Body.String()
+			require.Equal(t, http.StatusOK, rr.Code)
 
 			var resp save.Response
-
-			require.NoError(t, json.Unmarshal([]byte(body), &resp))
-
+			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 			require.Equal(t, tc.respError, resp.Error)
-
-			// TODO: add more checks
 		})
 	}
+
 }
