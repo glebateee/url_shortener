@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
+	"urlshortener/internal/clients/sso/grpc"
 	"urlshortener/internal/config"
 	"urlshortener/internal/http-server/handlers/url/redirect"
 	"urlshortener/internal/http-server/handlers/url/save"
@@ -32,8 +34,18 @@ func main() {
 	log.Debug("debug")
 	log.Info("info")
 
-	//init storage
+	ssoClient, err := grpc.New(context.Background(),
+		log,
+		cfg.Clients.SSO.Address,
+		cfg.Clients.SSO.Timeout,
+		cfg.Clients.SSO.RetriesCount,
+	)
 
+	if err != nil {
+		log.Error("failed to init sso client", sl.Err(err))
+		os.Exit(1)
+	}
+	ssoClient.IsAdmin(context.Background(), 1)
 	storage, err := sqlite.New(cfg.StoragePath)
 	if err != nil {
 		log.Error("failed to init storage", sl.Err(err))
